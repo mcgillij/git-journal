@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.env
+.venv/
+venv/
+
+# SQLite
+*.db
+*.sqlite3
+
+# Docker volumes (don't mount host DB, but ignore local copies)
+data/
+
+# IDE
+.vscode/
+.idea/
+
+# Local repo clones (these are git repos themselves)
+repos/

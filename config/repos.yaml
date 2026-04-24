@@ -1,0 +1,13 @@
+repos:
+  - name: amdfan
+    path: /home/j/gits/amdfan
+    branch: main
+    enabled: true
+  - name: py3status-amdfan
+    path: /home/j/gits/py3status_modules/py3status-amdfan
+    branch: master
+    enabled: true
+  - name: test-repo
+    path: /tmp/test-repo
+    branch: main
+    enabled: false

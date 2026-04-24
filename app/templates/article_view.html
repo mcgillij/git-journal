@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}{{ article.date.strftime("%B %d, %Y") }} — {{ project.name }}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 1.5rem;">
+    <a href="/projects/{{ project.id }}" style="color: var(--text-dim); font-size: 0.9rem;">&larr; Back to {{ project.name }}</a>
+</div>
+
+<h2>{{ article.date.strftime("%B %d, %Y") }} — {{ project.name }}</h2>
+
+<div class="stats-bar">
+    <span class="stat-item"><strong>{{ article.commit_count }}</strong> commits</span>
+    <span class="stat-item"><strong>{{ article.files_changed }}</strong> files changed</span>
+    <span class="stat-item"><strong>+{{ article.lines_added }}</strong> / <strong>-{{ article.lines_removed }}</strong> lines</span>
+</div>
+
+<div class="card">
+    <div class="article-content">{{ html_content|safe }}</div>
+</div>
+
+<div style="margin-top: 1.5rem;">
+    <button
+        hx-post="/projects/{{ project.id }}/articles/{{ article.date.isoformat() }}/regenerate"
+        hx-target=".article-content"
+        hx-swap="innerHTML"
+        class="btn btn-primary"
+    >Regenerate Summary</button>
+</div>
+
+{% endblock %}
