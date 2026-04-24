@@ -3,7 +3,7 @@ uvicorn[standard]==0.34.0
 sqlmodel==0.0.22
 openai==1.58.1
 gitpython==3.1.44
-jinja2==3.1.5
+jinja2==3.1.6
 pyyaml==6.0.2
 markdown==3.7
 apscheduler==3.10.4
