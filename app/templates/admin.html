@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Admin — Git Journal{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom: 1.5rem;">Admin</h2>
+
+<!-- Flash message -->
+{% if request.query_params.get('reconciled') == '1' %}
+<div class="flash flash-success">Reconciliation complete! Check the logs for details.</div>
+{% endif %}
+
+{% if request.query_params.get('readmes') %}
+<div class="flash flash-success">Fetched READMEs for {{ request.query_params.get('readmes') }} projects.</div>
+{% endif %}
+
+<!-- Reconciliation trigger -->
+<div class="card" style="margin-bottom: 2rem;">
+    <h3 style="margin-bottom: 0.75rem;">Reconciliation</h3>
+    <p style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 1rem;">
+        Scan all enabled repos for unprocessed days and generate AI summaries.
+        The daily scheduled run is at {{ settings.reconcile_hour if settings else '2' }}:00.
+    </p>
+    <form method="post" action="/admin/reconcile">
+        <button type="submit" class="btn btn-primary">Run Reconciliation Now</button>
+    </form>
+</div>
+
+<!-- Fetch READMEs -->
+<div class="card" style="margin-bottom: 2rem;">
+    <h3 style="margin-bottom: 0.75rem;">📖 Project Overviews</h3>
+    <p style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 1rem;">
+        Fetch README.md content from all enabled repositories to display project descriptions on the index and detail pages.
+    </p>
+    <form method="post" action="/admin/fetch-readmes">
+        <button type="submit" class="btn btn-primary">Fetch READMEs</button>
+    </form>
+</div>
+
+<!-- Config file display -->
+<div class="card" style="margin-bottom: 2rem;">
+    <h3 style="margin-bottom: 0.75rem;">Repository Configuration</h3>
+    <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 1rem;">
+        Edit <code>config/repos.yaml</code> on the host to add/remove projects. Changes take effect immediately.
+    </p>
+
+    {% if repos %}
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>Name</th><th>Path / URL</th><th>Branch</th><th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for repo in repos %}
+            <tr>
+                <td>{{ repo.name }}</td>
+                <td style="font-family: monospace; font-size: 0.8rem;">
+                    {{ repo.get('path', '') or repo.get('url', 'N/A') }}
+                </td>
+                <td>{{ repo.get('branch', 'main') }}</td>
+                <td>
+                    <span class="badge {% if repo.enabled %}badge-active{% else %}badge-inactive{% endif %}">
+                        {{ 'Active' if repo.enabled else 'Inactive' }}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: var(--text-dim);">No repos configured. Add entries to <code>config/repos.yaml</code>.</p>
+    {% endif %}
+</div>
+
+<!-- Database projects -->
+<div class="card">
+    <h3 style="margin-bottom: 0.75rem;">Database Projects ({{ projects|length }})</h3>
+    {% if projects %}
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>Name</th><th>Branch</th><th>Last Processed</th><th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for proj in projects %}
+            <tr>
+                <td><a href="/projects/{{ proj.id }}">{{ proj.name }}</a></td>
+                <td>{{ proj.branch }}</td>
+                <td>{{ proj.last_processed_date or 'Never' }}</td>
+                <td>
+                    <span class="badge {% if proj.enabled %}badge-active{% else %}badge-inactive{% endif %}">
+                        {{ 'Active' if proj.enabled else 'Inactive' }}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: var(--text-dim);">No projects in database yet. Run reconciliation after adding repos to config.</p>
+    {% endif %}
+</div>
+
+{% endblock %}

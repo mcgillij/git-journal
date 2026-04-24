@@ -1,0 +1,18 @@
+services:
+  git-journal:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # SQLite database persistence
+      - ./data:/app/data
+      # Config file (editable on host)
+      - ./config/repos.yaml:/app/config/repos.yaml:ro
+      # Optional: GitHub token for private repos
+      - ~/.github-token:/app/.github-token:ro
+      # Local git repositories
+      - ~/gits:/home/j/gits:ro
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

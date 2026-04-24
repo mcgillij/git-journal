@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Git Journal — Projects{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom: 1.5rem;">Projects</h2>
+
+<div class="project-grid">
+    {% for project in projects %}
+    <div class="project-card" style="{% if not project.enabled %}opacity: 0.5;{% endif %}">
+        <div style="display: flex; justify-content: space-between; align-items: start;">
+            <h3>
+                {% if project.in_db and project.db_project_id %}
+                    <a href="/projects/{{ project.db_project_id }}">{{ project.name }}</a>
+                {% else %}
+                    {{ project.name }}
+                {% endif %}
+            </h3>
+            <span class="badge {% if project.enabled %}badge-active{% else %}badge-inactive{% endif %}">
+                {% if project.enabled %}Active{% else %}Inactive{% endif %}
+            </span>
+        </div>
+
+        <p class="project-meta" style="margin-top: 0.5rem;">
+            Branch: {{ project.branch }}
+            {% if project.url %}<br>URL: {{ project.url }}{% endif %}
+        </p>
+
+        <div style="display: flex; gap: 1.5rem; margin-top: 0.75rem; font-size: 0.85rem; color: var(--text-dim);">
+            {% if project.in_db and project.db_project_id %}
+                <span>Articles: {{ project.article_count }}</span>
+                {% if project.last_processed_date %}
+                    <span>Last processed: {{ project.last_processed_date }}</span>
+                {% endif %}
+            {% else %}
+                <span style="color: var(--yellow);">Not yet in database</span>
+            {% endif %}
+        </div>
+
+        {% if project.readme_html %}
+        <div class="card" style="margin-top: 1rem; padding: 1rem; background: rgba(122,162,247,0.05);">
+            <h4 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.5rem;">📖 Project Overview</h4>
+            <div class="article-content" style="font-size: 0.85rem; max-height: 120px; overflow-y: auto;">
+                {{ project.readme_html|safe }}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+{% if not projects %}
+<p style="color: var(--text-dim); margin-top: 2rem;">No projects configured. Add repos to <code>config/repos.yaml</code>.</p>
+{% endif %}
+{% endblock %}
