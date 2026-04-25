@@ -2,8 +2,10 @@
 
 from urllib.parse import quote
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+
+from app.routes.auth import require_admin
 from sqlmodel import Session, select
 
 from app.database import engine
@@ -17,7 +19,7 @@ router = APIRouter()
 
 
 @router.get("/admin", response_class=HTMLResponse)
-async def admin_page(request: Request):
+async def admin_page(request: Request, _=Depends(require_admin)):
     """Admin page showing config and reconciliation controls."""
     repo_configs = load_repos()
 
@@ -39,7 +41,7 @@ async def admin_page(request: Request):
 
 
 @router.post("/admin/reconcile")
-async def trigger_reconciliation(request: Request):
+async def trigger_reconciliation(request: Request, _=Depends(require_admin)):
     """Trigger immediate reconciliation for all enabled repos."""
     results = reconcile_all()
 
@@ -48,7 +50,7 @@ async def trigger_reconciliation(request: Request):
 
 
 @router.post("/admin/reconcile/{project_name}")
-async def trigger_single_reconciliation(request: Request, project_name: str):
+async def trigger_single_reconciliation(request: Request, project_name: str, _=Depends(require_admin)):
     """Trigger reconciliation for a single project."""
     try:
         result = reconcile_single(project_name)
@@ -58,7 +60,7 @@ async def trigger_single_reconciliation(request: Request, project_name: str):
 
 
 @router.post("/admin/fetch-readmes")
-async def fetch_readmes(request: Request):
+async def fetch_readmes(request: Request, _=Depends(require_admin)):
     """Fetch README.md content for all enabled projects."""
     with Session(engine) as session:
         projects = session.execute(select(Project)).scalars().all()
@@ -92,7 +94,7 @@ async def fetch_readmes(request: Request):
 
 
 @router.post("/admin/generate-videos")
-async def generate_videos(request: Request):
+async def generate_videos(request: Request, _=Depends(require_admin)):
     """Generate gource videos for all enabled projects that don't have one yet."""
     with Session(engine) as session:
         projects = session.execute(select(Project)).scalars().all()
@@ -126,7 +128,7 @@ async def generate_videos(request: Request):
 
 
 @router.post("/admin/generate-video/{project_name}")
-async def generate_single_video(request: Request, project_name: str):
+async def generate_single_video(request: Request, project_name: str, _=Depends(require_admin)):
     """Generate gource video for a single project."""
     with Session(engine) as session:
         project = session.execute(

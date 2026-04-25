@@ -27,6 +27,9 @@ class Settings:
         "DATABASE_URL", "sqlite:///./data/git_journal.db"
     )
 
+    # Admin auth
+    admin_password: str = os.getenv("ADMIN_PASSWORD", "")
+
     # Paths (relative to app root in container)
     config_dir: Path = Path(__file__).parent.parent.parent / "config"
     repos_file: Path = config_dir / "repos.yaml"
