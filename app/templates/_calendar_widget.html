@@ -1,0 +1,41 @@
+<!-- Calendar widget — standalone fragment for HTMX swapping -->
+<div id="calendar-widget" class="calendar-widget card" style="max-height: 80vh; overflow-y: auto; padding: 1rem;">
+    <div class="month-nav">
+        <a href="{{ prev_month_link }}" class="btn">&larr; Prev</a>
+        <h2>{{ current_month }}</h2>
+        <a href="{{ next_month_link }}" class="btn">Next &rarr;</a>
+    </div>
+
+    <table class="calendar-table">
+        <thead>
+            <tr>
+                <th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for week in calendar %}
+            <tr>
+                {% for cell in week %}
+                <td>
+                    {% if cell.day is not none %}
+                        {% if cell.has_article %}
+                            <a href="/projects/{{ project_id }}/articles/{{ cell.date_str }}" 
+                               class="cal-day has-article"
+                               hx-get="/projects/{{ project_id }}/articles/{{ cell.date_str }}/content"
+                               hx-target="#content-area"
+                               hx-swap="innerHTML">
+                                {{ cell.day }}
+                            </a>
+                        {% else %}
+                            <span class="cal-day empty" style="visibility: visible; color: var(--text-dim);">{{ cell.day }}</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="cal-day"></span>
+                    {% endif %}
+                </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

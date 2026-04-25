@@ -7,6 +7,7 @@ from pathlib import Path
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.config import settings
@@ -34,6 +35,8 @@ async def lifespan(app: FastAPI):
         id="daily_reconciliation",
         name="Daily git journal reconciliation",
         replace_existing=True,
+        max_instances=1,  # Prevent overlapping scheduled runs
+        misfire_grace_time=3600,  # Allow up to 1h grace for missed runs
     )
     scheduler.start()
     logger.info(f"Reconciliation scheduled for {settings.reconcile_hour}:00 daily")
@@ -60,6 +63,11 @@ app.include_router(index.router)
 app.include_router(projects.router)
 app.include_router(articles.router)
 app.include_router(admin.router)
+
+# Mount static video files
+video_dir = Path(__file__).parent.parent / "data" / "videos"
+if video_dir.exists():
+    app.mount("/videos", StaticFiles(directory=str(video_dir)), name="videos")
 
 
 @app.get("/health")

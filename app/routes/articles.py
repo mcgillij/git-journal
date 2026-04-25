@@ -7,11 +7,7 @@ from sqlmodel import Session, select
 from app.config import settings
 from app.database import engine
 from app.models import Project, Article
-from app.services.ai_service import summarize_git_activity
-from app.services.git_service import (
-    collect_daily_activity,
-    format_git_activity,
-)
+from app.services.reconciliation import regenerate_article_for_date
 import markdown as md
 
 router = APIRouter()
@@ -84,48 +80,27 @@ async def regenerate_article(
     project_id: int,
     article_date: str,
 ):
-    """Regenerate an article's summary by re-calling the AI."""
+    """Regenerate an article's summary by re-calling the AI (with retry logic)."""
+    from datetime import date as dt_date
+
+    target = dt_date.fromisoformat(article_date)
+    result = regenerate_article_for_date(project_id, target)
+
+    if not result["success"]:
+        return HTMLResponse(
+            f"<p style='color: var(--red);'>Regeneration failed: {result['error']}</p>",
+            status_code=500,
+        )
+
+    # Re-fetch the updated article and render markdown for display
     with Session(engine) as session:
         article = session.execute(
             select(Article).where(
                 Article.project_id == project_id,
-                Article.date == article_date,
+                Article.date == target,
             )
         ).scalars().first()
 
-        if not article:
-            return HTMLResponse("Article not found", status_code=404)
-
-        proj = session.get(Project, project_id)
-
-        # Re-collect git activity for this date
-        commits, stats = collect_daily_activity(proj.git_path, article.date)
-        git_activity = format_git_activity(
-            proj.name, article.date, proj.branch, commits
-        )
-
-        # Generate new summary via AI
-        content = summarize_git_activity(
-            project_name=proj.name,
-            date_str=article_date,
-            branch=proj.branch,
-            git_activity=git_activity,
-        )
-
-        lines = content.split("\n")
-        title = lines[0].lstrip("# ").strip() if lines else f"Summary for {article.date}"
-
-        # Update article in DB
-        article.content = content
-        article.title = title
-        article.commit_count = stats.commit_count
-        article.files_changed = stats.files_changed
-        article.lines_added = stats.lines_added
-        article.lines_removed = stats.lines_removed
-        session.add(article)
-        session.commit()
-
-    # Render markdown for display
-    html_content = md.markdown(content, extensions=["tables"])
+    html_content = md.markdown(article.content, extensions=["tables"])
 
     return HTMLResponse(html_content)

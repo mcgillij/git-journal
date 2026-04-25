@@ -12,6 +12,7 @@ from sqlmodel import Session, select
 
 from app.database import engine
 from app.models import Project, Article
+from app.services.video_service import video_exists
 
 router = APIRouter()
 
@@ -56,6 +57,51 @@ def build_calendar(year: int, month: int, article_dates: set) -> list[list[dict]
         calendar.append(current_row)
 
     return calendar
+
+
+def _render_calendar(year: int, month: int, article_dates: set, project_id: int, request: Request):
+    """Render just the calendar widget HTML fragment."""
+    from calendar import month_name
+
+    calendar = build_calendar(year, month, article_dates)
+    month_label = f"{month_name[month]} {year}"
+
+    prev_month = month - 1 if month > 1 else 12
+    prev_year = year if month > 1 else year - 1
+    next_month = month + 1 if month < 12 else 1
+    next_year = year if month < 12 else year + 1
+
+    return request.app.state.templates.TemplateResponse(
+        "_calendar_widget.html",
+        {
+            "request": request,
+            "project_id": project_id,
+            "current_month": month_label,
+            "prev_month_link": f"/projects/{project_id}?month={prev_month}&year={prev_year}",
+            "next_month_link": f"/projects/{project_id}?month={next_month}&year={next_year}",
+            "calendar": calendar,
+        },
+    )
+
+
+@router.get("/projects/{project_id}/calendar/{year}/{month}")
+async def project_calendar_fragment(request: Request, project_id: int, year: int, month: int):
+    """Return just the calendar widget HTML for HTMX swapping."""
+    with Session(engine) as session:
+        project = session.get(Project, project_id)
+        if not project:
+            return HTMLResponse("<p>Project not found</p>", status_code=404)
+
+        articles = (
+            session.execute(
+                select(Article).where(Article.project_id == project_id)
+            )
+            .scalars()
+            .all()
+        )
+
+    article_dates = {a.date.isoformat() for a in articles}
+    return _render_calendar(year, month, article_dates, project_id, request)
 
 
 @router.get("/projects/{project_id}", response_class=HTMLResponse)
@@ -160,5 +206,7 @@ async def project_detail(request: Request, project_id: int):
             "date_range_start": date_range_start,
             "date_range_end": date_range_end,
             "recent_articles": recent_articles,
+            # Video URL (if generated)
+            "video_url": f"/videos/{project.name}.mp4" if video_exists(project.name) else None,
         },
     )

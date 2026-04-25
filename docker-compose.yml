@@ -12,6 +12,8 @@ services:
       - ~/.github-token:/app/.github-token:ro
       # Local git repositories
       - ~/gits:/home/j/gits:ro
+      - /home/j/aq:/home/j/aq:ro
+      - /home/j/3d-space:/home/j/3d-space:ro
     env_file: .env
     extra_hosts:
       - "host.docker.internal:host-gateway"

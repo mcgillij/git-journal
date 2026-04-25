@@ -4,6 +4,10 @@ FROM python:3.12-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
+    gource \
+    ffmpeg \
+    xvfb \
+    xauth \
     && rm -rf /var/lib/apt/lists/*
 
 # Trust all directories for git (needed when mounting host repos into container)

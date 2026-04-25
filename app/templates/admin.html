@@ -13,6 +13,21 @@
 <div class="flash flash-success">Fetched READMEs for {{ request.query_params.get('readmes') }} projects.</div>
 {% endif %}
 
+{% if request.query_params.get('videos') %}
+<div class="flash flash-success">
+    {% if request.query_params.get('msg') %}
+        {{ request.query_params.get('msg') }}
+    {% else %}
+        Videos: {{ request.query_params.get('videos') }} generated, 
+        {{ request.query_params.get('skipped', '0') }} skipped.
+    {% endif %}
+</div>
+{% endif %}
+
+{% if request.query_params.get('msg') and not request.query_params.get('videos') %}
+<div class="flash flash-success">{{ request.query_params.get('msg') }}</div>
+{% endif %}
+
 <!-- Reconciliation trigger -->
 <div class="card" style="margin-bottom: 2rem;">
     <h3 style="margin-bottom: 0.75rem;">Reconciliation</h3>
@@ -33,6 +48,19 @@
     </p>
     <form method="post" action="/admin/fetch-readmes">
         <button type="submit" class="btn btn-primary">Fetch READMEs</button>
+    </form>
+</div>
+
+<!-- Generate Videos -->
+<div class="card" style="margin-bottom: 2rem;">
+    <h3 style="margin-bottom: 0.75rem;">🎬 Commit History Videos</h3>
+    <p style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 1rem;">
+        Generate gource animation videos for all enabled projects that don't have one yet. 
+        Videos are stored as static files and displayed on the project detail page. 
+        Idempotent — skips projects with existing videos.
+    </p>
+    <form method="post" action="/admin/generate-videos">
+        <button type="submit" class="btn btn-primary">Generate Videos</button>
     </form>
 </div>
 
@@ -79,7 +107,7 @@
     <table class="admin-table">
         <thead>
             <tr>
-                <th>Name</th><th>Branch</th><th>Last Processed</th><th>Status</th>
+                <th>Name</th><th>Branch</th><th>Last Processed</th><th>Status</th><th>Action</th>
             </tr>
         </thead>
         <tbody>
@@ -92,6 +120,24 @@
                     <span class="badge {% if proj.enabled %}badge-active{% else %}badge-inactive{% endif %}">
                         {{ 'Active' if proj.enabled else 'Inactive' }}
                     </span>
+                </td>
+                <td>
+                    {% if proj.enabled %}
+                    <div style="display:flex; gap:0.3rem; flex-wrap:wrap;">
+                        <form method="post" action="/admin/reconcile/{{ proj.name }}" style="display:inline;">
+                            <button type="submit" class="btn btn-sm">Reconcile</button>
+                        </form>
+                        {% if not project_has_video.get(proj.name, False) %}
+                        <form method="post" action="/admin/generate-video/{{ proj.name }}" style="display:inline;" onsubmit="return confirm('Generate gource video for {{ proj.name }}? This may take several minutes.');">
+                            <button type="submit" class="btn btn-sm" style="background:var(--accent); color:#fff;">🎬 Video</button>
+                        </form>
+                        {% else %}
+                        <span style="color: var(--text-dim); font-size: 0.75rem; line-height: 2;">✓ video</span>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <span style="color: var(--text-dim); font-size: 0.8rem;">—</span>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}

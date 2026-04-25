@@ -1,4 +1,40 @@
 repos:
+  - name: pyDF
+    path: /home/j/gits/pyDF
+    branch: update_readme_w_screenshot
+    enabled: true
+  - name: pyTB
+    path: /home/j/gits/pyTB
+    branch: master
+    enabled: true
+  - name: jshooter
+    path: /home/j/gits/jshooter
+    branch: old
+    enabled: true
+  - name: noita_save_manager
+    path: /home/j/gits/noita_save_manager
+    branch: main
+    enabled: true
+  - name: working_memory
+    path: /home/j/gits/working_memory
+    branch: main
+    enabled: true
+  - name: aq
+    path: /home/j/aq
+    branch: main
+    enabled: true
+  - name: 3d-space
+    path: /home/j/3d-space
+    branch: main
+    enabled: true
+  - name: PyFeed
+    path: /home/j/gits/PyFeed
+    branch: master
+    enabled: true
+  - name: REZD
+    path: /home/j/gits/REZD
+    branch: update_to_3
+    enabled: true
   - name: amdfan
     path: /home/j/gits/amdfan
     branch: main

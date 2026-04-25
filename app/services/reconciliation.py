@@ -1,6 +1,9 @@
 """Core reconciliation logic — scans repos for unprocessed days and generates summaries."""
 
+import fcntl
 import logging
+import os
+import time
 from datetime import date, timedelta
 
 from sqlmodel import Session, select
@@ -17,6 +20,31 @@ from app.services.git_service import (
 )
 
 logger = logging.getLogger(__name__)
+
+LOCK_FILE = "/tmp/git-journal-reconcile.lock"
+
+
+def _acquire_lock():
+    """Acquire a file lock to prevent concurrent reconciliation runs.
+
+    Returns:
+        File descriptor if acquired successfully, None if already locked.
+    """
+    try:
+        fd = os.open(LOCK_FILE, os.O_CREAT | os.O_WRONLY)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return fd
+    except (OSError, BlockingIOError):
+        return None
+
+
+def _release_lock(fd):
+    """Release the file lock."""
+    if fd is not None:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
 
 
 def reconcile_project(project_name: str, git_path: str, branch: str,
@@ -86,7 +114,7 @@ def reconcile_project(project_name: str, git_path: str, branch: str,
 
     today = date.today()
     current_date = start_date
-    processed_last_date = last_processed_date
+    processed_last_date = last_processed_date  # Track actual last processed date
 
     while current_date <= today:
         try:
@@ -123,14 +151,18 @@ def reconcile_project(project_name: str, git_path: str, branch: str,
                 project_name, current_date, branch, commits
             )
 
-            # Generate summary via AI
+            # Generate summary via AI with retry logic (exponential backoff)
             logger.info(f"[{project_name}] Generating summary for {current_date} ({stats.commit_count} commits)")
-            content = summarize_git_activity(
+            content = _summarize_with_retry(
                 project_name=project_name,
                 date_str=current_date.isoformat(),
                 branch=branch,
                 git_activity=git_activity,
             )
+
+            # Validate AI output before saving
+            if not content or len(content.strip()) < 20:
+                raise ValueError(f"AI returned suspiciously short content ({len(content)} chars)")
 
             # Generate a title from the first line of content or use a default
             lines = content.split("\n")
@@ -150,7 +182,7 @@ def reconcile_project(project_name: str, git_path: str, branch: str,
                 )
                 session.add(article)
 
-                # Track the latest processed date
+                # Track the latest processed date (actual last successful date)
                 if not processed_last_date or current_date > processed_last_date:
                     processed_last_date = current_date
 
@@ -164,7 +196,7 @@ def reconcile_project(project_name: str, git_path: str, branch: str,
             logger.error(f"[{project_name}] {error_msg}", exc_info=True)
             result["errors"].append(error_msg)
 
-            # Log the failure
+            # Log the failure for potential retry on next run
             with Session(engine) as session:
                 log = ReconciliationLog(
                     project_id=project_id,
@@ -177,21 +209,76 @@ def reconcile_project(project_name: str, git_path: str, branch: str,
 
         current_date += timedelta(days=1)
 
-    # Update last_processed_date in DB if we processed anything
+    # Update last_processed_date in DB to the ACTUAL last processed date (not today)
     with Session(engine) as session:
         proj = session.get(Project, project_id)
-        if proj and result["dates_processed"] > 0:
-            proj.last_processed_date = today
+        if proj and processed_last_date:
+            proj.last_processed_date = processed_last_date
             session.add(proj)
             session.commit()
 
     return result
 
 
+def _summarize_with_retry(project_name: str, date_str: str, branch: str,
+                          git_activity: str, max_retries: int = 3) -> str:
+    """Call the AI summarization service with exponential backoff retry.
+
+    Args:
+        project_name: Name of the project.
+        date_str: Date string for the article (ISO format).
+        branch: Git branch being summarized.
+        git_activity: Formatted git activity text.
+        max_retries: Maximum number of retry attempts.
+
+    Returns:
+        AI-generated markdown summary.
+
+    Raises:
+        Exception: The last exception if all retries fail.
+    """
+    last_error = None
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            return summarize_git_activity(
+                project_name=project_name,
+                date_str=date_str,
+                branch=branch,
+                git_activity=git_activity,
+            )
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries:
+                delay = 2 ** attempt  # 2s, 4s, 8s...
+                logger.warning(
+                    f"[{project_name}] AI call failed (attempt {attempt}/{max_retries}): "
+                    f"{e}. Retrying in {delay}s..."
+                )
+                time.sleep(delay)
+
+    raise last_error
+
+
 def reconcile_all():
     """Reconcile all enabled projects. Called by APScheduler."""
     logger.info("Starting reconciliation run")
 
+    # Acquire lock to prevent concurrent runs
+    fd = _acquire_lock()
+    if fd is None:
+        logger.warning("Reconciliation already in progress, skipping this run")
+        return [{"project": "ALL", "dates_processed": 0, "dates_skipped": 0,
+                 "errors": ["Reconciliation already in progress"]}]
+
+    try:
+        _do_reconcile_all()
+    finally:
+        _release_lock(fd)
+
+
+def _do_reconcile_all():
+    """Internal reconciliation logic (runs under lock)."""
     # Load repos from config file and sync with DB
     repo_configs = load_repos()
     config_names = {r["name"] for r in repo_configs}
@@ -200,6 +287,20 @@ def reconcile_all():
         # Get all projects from DB
         all_projects = session.execute(select(Project)).scalars().all()
         db_projects = {p.name: p for p in all_projects}
+
+        # Add new repos from config that aren't in DB yet
+        for repo_config in repo_configs:
+            name = repo_config["name"]
+            if name not in db_projects:
+                project = Project(
+                    name=name,
+                    git_url=repo_config.get("url"),
+                    git_path=repo_config.get("path", ""),
+                    branch=repo_config.get("branch", "main"),
+                    enabled=repo_config.get("enabled", True),
+                )
+                session.add(project)
+                db_projects[name] = project
 
         # Sync enabled/disabled state based on config file
         for name, project in db_projects.items():
@@ -276,3 +377,75 @@ def reconcile_single(project_name: str):
             git_url=project.git_url,
             last_processed_date=project.last_processed_date,
         )
+
+
+def regenerate_article_for_date(project_id: int, target_date: date) -> dict:
+    """Regenerate a single article for a specific date.
+
+    Used by the per-article regeneration endpoint.
+    Returns a result dict with status info.
+    """
+    result = {"success": False, "error": None}
+
+    try:
+        # Get existing article and project
+        with Session(engine) as session:
+            article = session.execute(
+                select(Article).where(
+                    Article.project_id == project_id,
+                    Article.date == target_date,
+                )
+            ).scalars().first()
+
+            if not article:
+                result["error"] = "Article not found"
+                return result
+
+            proj = session.get(Project, project_id)
+            if not proj or not proj.git_path:
+                result["error"] = "Project not found or no git path"
+                return result
+
+        # Collect git activity for this date
+        commits, stats = collect_daily_activity(proj.git_path, target_date)
+
+        if not commits:
+            result["error"] = f"No commits found for {target_date}"
+            return result
+
+        # Format and summarize with retry logic
+        git_activity = format_git_activity(
+            proj.name, target_date, proj.branch, commits
+        )
+
+        content = _summarize_with_retry(
+            project_name=proj.name,
+            date_str=target_date.isoformat(),
+            branch=proj.branch,
+            git_activity=git_activity,
+        )
+
+        # Validate AI output
+        if not content or len(content.strip()) < 20:
+            raise ValueError(f"AI returned suspiciously short content ({len(content)} chars)")
+
+        lines = content.split("\n")
+        title = lines[0].lstrip("# ").strip() if lines else f"Summary for {target_date}"
+
+        # Update article in DB
+        with Session(engine) as session:
+            article.content = content
+            article.title = title
+            article.commit_count = stats.commit_count
+            article.files_changed = stats.files_changed
+            article.lines_added = stats.lines_added
+            article.lines_removed = stats.lines_removed
+            session.add(article)
+            session.commit()
+
+        result["success"] = True
+    except Exception as e:
+        logger.error(f"Failed to regenerate article for {target_date}: {e}", exc_info=True)
+        result["error"] = str(e)
+
+    return result
